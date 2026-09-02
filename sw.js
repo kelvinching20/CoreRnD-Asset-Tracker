@@ -1,4 +1,4 @@
-const CACHE_NAME = "corernd-asset-tracker-v2";
+const CACHE_NAME = "corernd-asset-tracker-v3";
 
 const APP_SHELL = [
   "./",
