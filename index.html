@@ -1,0 +1,1168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CoreRnD Asset Tracker</title>
+
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#00214B">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Asset Tracker">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+  :root{
+    /* Hyundai-inspired palette: deep Hyundai blue + clean white, minimal accents */
+    --navy:#00214B;
+    --blue:#0F5FC2;
+    --blue-light:#EEF3FA;
+    --blue-mid:#DCE6F4;
+    --white:#FFFFFF;
+    --ink:#111417;
+    --slate:#5C6570;
+    --slate-light:#9098A3;
+    --line:#E1E5EA;
+    --green:#137A4C;
+    --green-bg:#E6F6EE;
+    --amber:#9A5B00;
+    --amber-bg:#FDF1DC;
+    --red:#B4232C;
+    --red-bg:#FBE7E8;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:'Inter',system-ui,sans-serif;
+    background:var(--blue-light);
+    color:var(--ink);
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3,.brand{font-family:'Inter',sans-serif;font-weight:800;letter-spacing:-0.01em;}
+  button{font-family:inherit;cursor:pointer;}
+  input,select{font-family:inherit;}
+  ::selection{background:var(--blue-mid);}
+  a{color:var(--blue);}
+  .hidden{display:none !important;}
+  button:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focus-visible{
+    outline:2px solid var(--blue);
+    outline-offset:2px;
+  }
+  button:disabled{opacity:0.6;cursor:not-allowed;}
+
+  /* ---------- Setup gate (shown if Supabase config is missing) ---------- */
+  #setup-gate{
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:24px;
+  }
+  .setup-card{
+    max-width:560px;
+    background:var(--white);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:36px;
+    box-shadow:0 24px 60px -30px rgba(15,46,92,0.35);
+  }
+  .setup-card h2{color:var(--navy);font-size:20px;margin:0 0 10px;}
+  .setup-card p{color:var(--slate);font-size:14px;line-height:1.6;margin:0 0 14px;}
+  .setup-card code{
+    background:var(--blue-light);
+    padding:2px 6px;
+    border-radius:4px;
+    font-size:13px;
+    color:var(--navy);
+  }
+  .setup-card ol{color:var(--slate);font-size:14px;line-height:1.9;padding-left:20px;margin:0 0 14px;}
+
+  /* ---------- Auth screen ---------- */
+  #auth-screen{
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:24px;
+    background:
+      radial-gradient(circle at 15% 20%, var(--blue-mid) 0%, transparent 45%),
+      radial-gradient(circle at 85% 80%, var(--blue-mid) 0%, transparent 40%),
+      var(--blue-light);
+  }
+  .auth-wrap{
+    width:100%;
+    max-width:960px;
+    display:grid;
+    grid-template-columns:1.05fr 1fr;
+    background:var(--white);
+    border-radius:16px;
+    overflow:hidden;
+    box-shadow:0 24px 60px -20px rgba(15,46,92,0.35);
+    border:1px solid var(--line);
+  }
+  .auth-side{
+    background:linear-gradient(160deg, var(--navy) 0%, #163E7A 55%, var(--blue) 100%);
+    color:var(--white);
+    padding:48px 40px;
+    display:flex;
+    flex-direction:column;
+    justify-content:space-between;
+    position:relative;
+    overflow:hidden;
+  }
+  .auth-side::after{
+    content:"";position:absolute;right:-60px;bottom:-60px;width:220px;height:220px;
+    border-radius:50%;border:1px solid rgba(255,255,255,0.14);
+  }
+  .auth-side::before{
+    content:"";position:absolute;right:10px;bottom:40px;width:130px;height:130px;
+    border-radius:50%;border:1px solid rgba(255,255,255,0.14);
+  }
+  .brand{font-size:22px;font-weight:700;letter-spacing:0.01em;}
+  .auth-side h2{font-size:28px;line-height:1.25;font-weight:600;margin:32px 0 12px;max-width:280px;}
+  .auth-side p{color:rgba(255,255,255,0.75);line-height:1.6;max-width:280px;margin:0;font-size:14.5px;}
+  .auth-stats{display:flex;gap:28px;margin-top:auto;padding-top:32px;position:relative;z-index:1;}
+  .auth-stats div b{display:block;font-size:20px;font-weight:700;}
+  .auth-stats div span{font-size:12.5px;color:rgba(255,255,255,0.65);}
+
+  .auth-form-panel{padding:48px 44px;display:flex;flex-direction:column;}
+  .auth-tabs{display:flex;background:var(--blue-light);border-radius:10px;padding:4px;margin-bottom:28px;}
+  .auth-tab{
+    flex:1;border:none;background:transparent;padding:10px 0;border-radius:8px;
+    font-weight:600;font-size:14px;color:var(--slate);transition:background .15s ease, color .15s ease;
+  }
+  .auth-tab.active{background:var(--white);color:var(--navy);box-shadow:0 1px 3px rgba(15,46,92,0.15);}
+  .field{margin-bottom:16px;}
+  .field label{display:block;font-size:13px;font-weight:600;color:var(--ink);margin-bottom:6px;}
+  .field input, .field select{
+    width:100%;padding:11px 13px;border-radius:8px;border:1.5px solid var(--line);
+    font-size:14.5px;color:var(--ink);background:var(--white);transition:border-color .15s ease;
+  }
+  .field input:focus, .field select:focus{border-color:var(--blue);}
+  .field-hint{font-size:12px;color:var(--slate-light);margin-top:4px;}
+  .btn-primary{
+    background:var(--blue);color:var(--white);border:none;padding:12px 18px;border-radius:8px;
+    font-weight:600;font-size:14.5px;width:100%;transition:background .15s ease, transform .05s ease;
+    display:flex;align-items:center;justify-content:center;gap:8px;
+  }
+  .btn-primary:hover{background:#1D4ED8;}
+  .btn-primary:active{transform:scale(0.99);}
+  .auth-error{
+    background:var(--red-bg);color:var(--red);border:1px solid #F3C6C8;padding:10px 12px;
+    border-radius:8px;font-size:13px;margin-bottom:16px;
+  }
+  .auth-success{
+    background:var(--green-bg);color:var(--green);border:1px solid #BEE6D2;padding:10px 12px;
+    border-radius:8px;font-size:13px;margin-bottom:16px;
+  }
+  .auth-note{margin-top:20px;font-size:12.5px;color:var(--slate-light);line-height:1.5;text-align:center;}
+  .guest-divider{width:100%;display:flex;align-items:center;justify-content:center;margin:10px 0 8px;font-size:13px;color:var(--slate);}
+  .guest-divider::before,
+  .guest-divider::after{content:"";flex:1;height:1px;background:var(--line);}
+  .guest-divider span{padding:0 10px;}  
+  .spinner{
+    width:15px;height:15px;border-radius:50%;
+    border:2px solid rgba(255,255,255,0.4);border-top-color:#fff;
+    animation:spin .7s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  /* ---------- App shell ---------- */
+  #app-screen{min-height:100vh;display:flex;flex-direction:column;}
+  header.topbar{
+    background:var(--white);border-bottom:1px solid var(--line);padding:14px 28px;
+    display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10;
+  }
+  header.topbar .brand{color:var(--navy);font-size:19px;}
+  .topbar-right{display:flex;align-items:center;gap:16px;}
+  .user-chip{
+    display:flex;align-items:center;gap:10px;padding:6px 12px 6px 6px;border-radius:999px;
+    background:var(--blue-light);font-size:13.5px;color:var(--navy);font-weight:600;
+  }
+  .user-avatar{
+    width:26px;height:26px;border-radius:50%;background:var(--navy);color:var(--white);
+    display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;
+  }
+  .btn-ghost{
+    background:transparent;border:1.5px solid var(--line);color:var(--slate);padding:8px 14px;
+    border-radius:8px;font-weight:600;font-size:13.5px;
+  }
+  .btn-ghost:hover{border-color:var(--blue);color:var(--blue);}
+
+  main{flex:1;max-width:1220px;width:100%;margin:0 auto;padding:32px 28px 60px;}
+  .page-head{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:16px;margin-bottom:24px;}
+  .page-head h1{font-size:24px;margin:0 0 4px;color:var(--navy);}
+  .page-head .sub{color:var(--slate);font-size:14px;margin:0;}
+
+  .banner{
+    padding:12px 16px;border-radius:10px;font-size:13.5px;margin-bottom:20px;
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+  }
+  .banner.error{background:var(--red-bg);color:var(--red);border:1px solid #F3C6C8;}
+  .banner button{background:transparent;border:none;color:inherit;font-weight:700;font-size:15px;}
+
+  .stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:28px;}
+  .stat-card{background:var(--white);border:1px solid var(--line);border-radius:12px;padding:16px 18px;}
+  .stat-card .num{font-size:26px;font-weight:700;color:var(--navy);font-family:'Inter',sans-serif;}
+  .stat-card .lbl{font-size:12.5px;color:var(--slate);margin-top:2px;}
+  .stat-card.accent{border-color:var(--blue);background:var(--blue-light);}
+
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between;margin-bottom:16px;}
+  .toolbar-left{display:flex;gap:10px;flex-wrap:wrap;flex:1;}
+  .search-box{position:relative;max-width:280px;flex:1;min-width:180px;}
+  .search-box input{width:100%;padding:9px 12px 9px 32px;border-radius:8px;border:1.5px solid var(--line);font-size:13.5px;background:var(--white);}
+  .search-box input:focus{border-color:var(--blue);}
+  .search-box::before{content:"";position:absolute;left:11px;top:50%;width:13px;height:13px;transform:translateY(-50%);border:1.5px solid var(--slate-light);border-radius:50%;}
+  .search-box::after{content:"";position:absolute;left:20px;top:60%;width:6px;height:1.5px;background:var(--slate-light);transform:rotate(45deg);}
+  select.filter-select{padding:9px 10px;border-radius:8px;border:1.5px solid var(--line);font-size:13.5px;background:var(--white);color:var(--ink);}
+  .btn-add{
+    background:var(--navy);color:var(--white);border:none;padding:10px 16px;border-radius:8px;
+    font-weight:600;font-size:13.5px;display:flex;align-items:center;gap:6px;white-space:nowrap;
+  }
+  .btn-add:hover{background:#0C2547;}
+  .btn-add.guest-hidden{display:none !important;}
+  .guest-mode-banner{display:none;align-items:center;gap:8px;margin-top:8px;padding:7px 10px;border-radius:8px;background:#FFF7E6;border:1px solid #F1D18A;color:#7A5700;font-size:12.5px;font-weight:600;}
+  .guest-mode-banner.visible{display:inline-flex;}
+  .guest-lock{font-size:11px;color:var(--slate);margin-left:4px;}
+
+  .table-card{background:var(--white);border:1px solid var(--line);border-radius:12px;overflow:hidden;}
+  .table-scroll{max-height:560px;overflow-y:auto;overflow-x:auto;}
+  .table-scroll thead th{position:sticky;top:0;z-index:1;}
+  table{width:100%;border-collapse:collapse;min-width:900px;}
+  thead th{
+    text-align:left;font-size:12px;font-weight:600;color:var(--slate);padding:12px 16px;
+    background:var(--blue-light);border-bottom:1px solid var(--line);white-space:nowrap;
+  }
+  tbody td{padding:13px 16px;font-size:13.5px;color:var(--ink);border-bottom:1px solid var(--line);vertical-align:middle;}
+  tbody tr:last-child td{border-bottom:none;}
+  tbody tr:hover{background:#FAFCFF;}
+  .asset-no{font-weight:600;color:var(--navy);font-family:'Inter',sans-serif;}
+  .inline-date-input, .inline-team-input{
+    width:100%;
+    min-width:110px;
+    padding:6px 8px;
+    border-radius:6px;
+    border:1.5px solid transparent;
+    font-size:13px;
+    font-family:inherit;
+    color:var(--ink);
+    background:transparent;
+    transition:border-color .15s ease, background .15s ease;
+  }
+  .inline-date-input:hover, .inline-team-input:hover{background:var(--blue-light);}
+  .inline-date-input:focus, .inline-team-input:focus{
+    border-color:var(--blue);
+    background:var(--white);
+  }
+  .inline-team-input::placeholder{color:var(--slate-light);}
+  .badge{display:inline-block;padding:4px 10px;border-radius:999px;font-size:11.5px;font-weight:600;}
+  .badge.available{background:var(--green-bg);color:var(--green);}
+  .badge.onloan{background:var(--amber-bg);color:var(--amber);}
+  .row-actions{display:flex;gap:6px;}
+  .icon-btn{background:transparent;border:1.5px solid var(--line);width:30px;height:30px;border-radius:7px;color:var(--slate);font-size:13px;display:flex;align-items:center;justify-content:center;}
+  .icon-btn:hover{border-color:var(--blue);color:var(--blue);}
+  .icon-btn.danger:hover{border-color:var(--red);color:var(--red);}
+
+  .empty-state{padding:60px 20px;text-align:center;color:var(--slate);}
+  .empty-state h3{color:var(--navy);margin-bottom:6px;font-size:16px;}
+  .empty-state p{font-size:13.5px;margin:0 0 16px;}
+  .loading-state{padding:60px 20px;text-align:center;color:var(--slate);font-size:13.5px;}
+
+  .pagination-bar{
+    display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;
+    padding:12px 16px;border-top:1px solid var(--line);background:var(--white);
+  }
+  .page-size-control{display:flex;align-items:center;gap:8px;}
+  .page-size-control label{font-size:12.5px;color:var(--slate);white-space:nowrap;}
+  .page-size-control select{padding:6px 8px;font-size:13px;}
+  .page-nav{display:flex;align-items:center;gap:10px;}
+  .page-nav #page-summary{font-size:12.5px;color:var(--slate);white-space:nowrap;}
+  .page-nav .icon-btn:disabled{opacity:0.4;cursor:not-allowed;}
+
+  .modal-backdrop{position:fixed;inset:0;background:rgba(15,46,92,0.45);display:flex;align-items:center;justify-content:center;padding:20px;z-index:100;}
+  .modal{background:var(--white);border-radius:14px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto;padding:30px 30px 26px;box-shadow:0 30px 70px -25px rgba(15,46,92,0.5);}
+  .modal h2{font-size:18px;color:var(--navy);margin:0 0 4px;}
+  .modal .modal-sub{font-size:13px;color:var(--slate);margin:0 0 22px;}
+  .modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 14px;}
+  .modal-grid .field.full{grid-column:1 / -1;}
+  .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px;border-top:1px solid var(--line);padding-top:18px;}
+  .btn-secondary{background:var(--white);border:1.5px solid var(--line);color:var(--slate);padding:10px 18px;border-radius:8px;font-weight:600;font-size:13.5px;}
+  .btn-secondary:hover{border-color:var(--slate);}
+  .btn-danger-confirm{background:var(--red);color:var(--white);border:none;padding:10px 18px;border-radius:8px;font-weight:600;font-size:13.5px;}
+
+  .toast{
+    position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--navy);
+    color:var(--white);padding:12px 20px;border-radius:8px;font-size:13.5px;font-weight:500;
+    box-shadow:0 12px 30px -10px rgba(15,46,92,0.5);opacity:0;pointer-events:none;
+    transition:opacity .2s ease, transform .2s ease;z-index:200;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto;}
+  .toast.error{background:var(--red);}
+
+  @media (max-width:820px){
+    .auth-wrap{grid-template-columns:1fr;}
+    .auth-side{display:none;}
+    .stat-row{grid-template-columns:repeat(2,1fr);}
+    main{padding:24px 16px 50px;}
+    .modal-grid{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ SETUP GATE (shown until Supabase keys are filled in) ============ -->
+<div id="setup-gate" class="hidden">
+  <div class="setup-card">
+    <h2>Connect your Supabase project</h2>
+    <p>This app needs a free Supabase project to store accounts and assets. Open <code>index.html</code> in a text editor and fill in the two values near the top of the <code>&lt;script&gt;</code> tag:</p>
+    <ol>
+      <li>Create a free project at <code>supabase.com</code></li>
+      <li>Run <code>schema.sql</code> in the Supabase SQL Editor</li>
+      <li>Copy your Project URL and anon public key from Settings → API</li>
+      <li>Paste them into <code>SUPABASE_URL</code> and <code>SUPABASE_ANON_KEY</code></li>
+      <li>Save and reload this page</li>
+    </ol>
+    <p>Full walkthrough was provided alongside this file.</p>
+  </div>
+</div>
+
+<!-- ============ AUTH SCREEN ============ -->
+<div id="auth-screen" class="hidden">
+  <div class="auth-wrap">
+    <div class="auth-side">
+      <div class="brand">CoreRnD Asset Tracker</div>
+      <div>
+        <h2>Know where every asset is, always.</h2>
+        <p>Track asset location, owner, loan status and who currently holds it — in one shared record.</p>
+      </div>
+      <div class="auth-stats">
+        <div><b id="stat-total-side">—</b><span>Assets tracked</span></div>
+        <div><b id="stat-loan-side">—</b><span>On loan</span></div>
+      </div>
+    </div>
+    <div class="auth-form-panel">
+      <div class="auth-tabs">
+        <button class="auth-tab active" id="tab-login" onclick="switchAuthTab('login')">Log in</button>
+        <button class="auth-tab" id="tab-signup" onclick="switchAuthTab('signup')">Create account</button>
+      </div>
+
+      <div id="auth-error" class="auth-error hidden"></div>
+      <div id="auth-success" class="auth-success hidden"></div>
+
+      <!-- LOGIN FORM -->
+      <form id="login-form" onsubmit="return handleLogin(event)">
+        <div class="field">
+          <label for="login-email">Email</label>
+          <input type="email" id="login-email" required placeholder="you@company.com" autocomplete="email">
+        </div>
+        <div class="field">
+          <label for="login-password">Password</label>
+          <input type="password" id="login-password" required placeholder="••••••••" autocomplete="current-password">
+        </div>
+        <button type="submit" class="btn-primary" id="login-btn"><span>Log in</span></button>
+      </form>
+
+      <!-- SIGNUP FORM -->
+      <form id="signup-form" class="hidden" onsubmit="return handleSignup(event)">
+        <div class="field">
+          <label for="signup-name">Full name</label>
+          <input type="text" id="signup-name" required placeholder="Jamie Ong" autocomplete="name">
+        </div>
+        <div class="field">
+          <label for="signup-email">Email</label>
+          <input type="email" id="signup-email" required placeholder="you@company.com" autocomplete="email">
+        </div>
+        <div class="field">
+          <label for="signup-password">Password</label>
+          <input type="password" id="signup-password" required minlength="6" placeholder="At least 6 characters" autocomplete="new-password">
+          <div class="field-hint">Minimum 6 characters.</div>
+        </div>
+        <button type="submit" class="btn-primary" id="signup-btn"><span>Create account</span></button>
+        <p class="auth-note" id="signup-note">Your organization's Supabase project may require confirming your email before you can log in.</p>
+      </form>
+
+      <div class="guest-divider"><span>or</span></div>
+      <button type="button" class="btn-guest" onclick="enterGuestMode()">Continue as guest</button>
+      <p class="auth-note">Guests can browse the asset register but can't add, edit, or delete assets.</p>
+      
+    </div>
+  </div>
+</div>
+
+<!-- ============ APP SCREEN ============ -->
+<div id="app-screen" class="hidden">
+  <header class="topbar">
+    <div class="brand">CoreRnD Asset Tracker</div>
+    <div class="topbar-right">
+      <div class="user-chip">
+        <span class="user-avatar" id="user-initial">A</span>
+        <span id="user-name-display">—</span>
+      </div>
+      <button class="btn-ghost" onclick="handleLogout()">Log out</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="page-head">
+      <div>
+        <h1>Asset register</h1>
+        <p class="sub">Every tracked item, its location, owner, and who currently holds it.</p>
+        <div id="guest-mode-banner" class="guest-mode-banner">🔒 Guest mode · Read only <span class="guest-lock">Changes are disabled</span></div>
+      </div>
+    </div>
+
+    <div id="app-error" class="banner error hidden">
+      <span id="app-error-text"></span>
+      <button onclick="document.getElementById('app-error').classList.add('hidden')">×</button>
+    </div>
+
+    <div class="stat-row">
+      <div class="stat-card"><div class="num" id="stat-total">0</div><div class="lbl">Total assets</div></div>
+      <div class="stat-card accent"><div class="num" id="stat-loan">0</div><div class="lbl">Currently on loan</div></div>
+      <div class="stat-card"><div class="num" id="stat-available">0</div><div class="lbl">Available</div></div>
+      <div class="stat-card"><div class="num" id="stat-locations">0</div><div class="lbl">Locations in use</div></div>
+    </div>
+
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <div class="search-box">
+          <input type="text" id="search-input" placeholder="Search asset number or name" oninput="onFiltersChanged()">
+        </div>
+        <select class="filter-select" id="filter-owner" onchange="onFiltersChanged()">
+          <option value="">All owning cells</option>
+        </select>
+        <select class="filter-select" id="filter-status" onchange="onFiltersChanged()">
+          <option value="">All statuses</option>
+          <option value="onloan">On loan</option>
+          <option value="available">Available</option>
+        </select>
+        <select class="filter-select" id="filter-team" onchange="onFiltersChanged()">
+          <option value="">All loan cells</option>
+        </select>
+      </div>
+      <button id="add-asset-btn" class="btn-add" onclick="openAssetModal()">+ Add asset</button>
+    </div>
+
+    <div class="table-card">
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Asset #</th>
+              <th>Name</th>
+              <th>Location</th>
+              <th>Owning cell</th>
+              <th>Status</th>
+              <th>Loan date out</th>
+              <th>Date in</th>
+              <th>Loan cell</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="asset-tbody"></tbody>
+        </table>
+        <div id="loading-state" class="loading-state">Loading assets…</div>
+        <div id="empty-state" class="empty-state hidden">
+          <h3>No assets match this view</h3>
+          <p id="empty-state-text">Try clearing filters, or add a new asset to the register.</p>
+          <button id="empty-add-asset-btn" class="btn-add" style="display:inline-flex" onclick="openAssetModal()">+ Add asset</button>
+        </div>
+      </div>
+      <div class="pagination-bar" id="pagination-bar">
+        <div class="page-size-control">
+          <label for="page-size-select">Rows per page</label>
+          <select class="filter-select" id="page-size-select" onchange="onPageSizeChanged()">
+            <option value="10">10</option>
+            <option value="20" selected>20</option>
+            <option value="30">30</option>
+            <option value="40">40</option>
+            <option value="50">50</option>
+            <option value="60">60</option>
+            <option value="70">70</option>
+            <option value="80">80</option>
+            <option value="90">90</option>
+            <option value="100">100</option>
+          </select>
+        </div>
+        <div class="page-nav">
+          <span id="page-summary">—</span>
+          <button type="button" class="icon-btn" id="page-prev" onclick="goToPage(-1)" title="Previous page">‹</button>
+          <button type="button" class="icon-btn" id="page-next" onclick="goToPage(1)" title="Next page">›</button>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ============ ASSET MODAL ============ -->
+<div id="asset-modal-backdrop" class="modal-backdrop hidden">
+  <div class="modal">
+    <h2 id="modal-title">Add asset</h2>
+    <p class="modal-sub" id="modal-sub">Enter the asset's details below.</p>
+    <form id="asset-form" onsubmit="return handleAssetSubmit(event)">
+      <input type="hidden" id="asset-id">
+      <div class="modal-grid">
+        <div class="field full">
+          <label for="asset-number">Asset number</label>
+          <input type="text" id="asset-number" required placeholder="e.g. 42RDTIM00001" style="text-transform:uppercase;">
+          <div class="field-hint">Saved in all caps regardless of how you type it.</div>
+        </div>
+        <div class="field full">
+          <label for="asset-name">Name</label>
+          <input type="text" id="asset-name" required placeholder="e.g. Realsense D455">
+        </div>
+        <div class="field full">
+          <label for="asset-location">Location</label>
+          <input type="text" id="asset-location" required list="location-suggestions" placeholder="e.g. Me Lab Asset Cabinet">
+        </div>
+        <div class="field full">
+          <label for="asset-owner">Owning cell</label>
+          <input type="text" id="asset-owner" list="owner-suggestions" placeholder="e.g. Mobile Robot Cell">
+          <div class="field-hint">The cell this asset belongs to (not who it's currently loaned to).</div>
+        </div>
+        <div class="field">
+          <label for="asset-date-out">Loan date out</label>
+          <input type="date" id="asset-date-out">
+        </div>
+        <div class="field">
+          <label for="asset-date-in">Date in</label>
+          <input type="date" id="asset-date-in">
+          <div class="field-hint">Setting this clears loan date out and loan cell — the asset is marked returned.</div>
+        </div>
+        <div class="field full">
+          <label for="asset-team">Loan cell</label>
+          <input type="text" id="asset-team" list="team-suggestions" placeholder="e.g. Sensing Cell">
+          <div class="field-hint">Leave date out and cell blank if the asset isn't on loan.</div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" onclick="closeAssetModal()">Cancel</button>
+        <button type="submit" class="btn-primary" id="asset-save-btn" style="width:auto;"><span>Save asset</span></button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ============ DELETE CONFIRM MODAL ============ -->
+<div id="delete-modal-backdrop" class="modal-backdrop hidden">
+  <div class="modal" style="max-width:380px;">
+    <h2>Remove this asset?</h2>
+    <p class="modal-sub">This deletes <strong id="delete-asset-label"></strong> from the register. This can't be undone.</p>
+    <div class="modal-actions">
+      <button type="button" class="btn-secondary" onclick="closeDeleteModal()">Cancel</button>
+      <button type="button" class="btn-danger-confirm" onclick="confirmDelete()">Delete asset</button>
+    </div>
+  </div>
+</div>
+
+<datalist id="location-suggestions"></datalist>
+<datalist id="owner-suggestions"></datalist>
+<datalist id="team-suggestions"></datalist>
+
+<div id="toast" class="toast"></div>
+
+<script>
+  /* ============================================================
+     1. FILL THESE IN — from your Supabase project's
+        Settings → API page (Project URL + anon public key).
+        Both are safe to expose in client-side code; access to
+        data is controlled by the Row Level Security policies
+        in schema.sql, not by keeping this key secret.
+  ============================================================ */
+  const SUPABASE_URL = "https://ecnxxgrthjqfyrovclgq.supabase.co";
+  const SUPABASE_ANON_KEY = "sb_publishable_1W1rJj0ELelD4gc_XuZXWw_Zd1CeUL2";
+
+  // Security model:
+  // Guest mode = unauthenticated request -> Supabase `anon` role -> SELECT only via RLS.
+  // Logged-in mode = authenticated request -> Supabase `authenticated` role -> CRUD via RLS.
+  // Never put a Supabase service_role key in this file.
+  const configured = SUPABASE_URL.startsWith("http") && SUPABASE_ANON_KEY.length > 20;
+
+  if (!configured) {
+    document.getElementById('setup-gate').classList.remove('hidden');
+  } else {
+    document.getElementById('auth-screen').classList.remove('hidden');
+    runApp();
+  }
+
+  function runApp(){
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const state = {
+      assets: [],
+      currentUser: null,
+      isGuest: false,
+      editingDeleteId: null,
+      loading: true,
+      pageSize: 20,
+      currentPage: 1
+    };
+
+    /* ---------------- Auth screen logic ---------------- */
+    window.switchAuthTab = function(tab){
+      document.getElementById('tab-login').classList.toggle('active', tab === 'login');
+      document.getElementById('tab-signup').classList.toggle('active', tab === 'signup');
+      document.getElementById('login-form').classList.toggle('hidden', tab !== 'login');
+      document.getElementById('signup-form').classList.toggle('hidden', tab !== 'signup');
+      hideAuthMessages();
+    };
+
+    function showAuthError(msg){
+      const el = document.getElementById('auth-error');
+      el.textContent = msg;
+      el.classList.remove('hidden');
+      document.getElementById('auth-success').classList.add('hidden');
+    }
+    function showAuthSuccess(msg){
+      const el = document.getElementById('auth-success');
+      el.textContent = msg;
+      el.classList.remove('hidden');
+      document.getElementById('auth-error').classList.add('hidden');
+    }
+    function hideAuthMessages(){
+      document.getElementById('auth-error').classList.add('hidden');
+      document.getElementById('auth-success').classList.add('hidden');
+    }
+    function setBtnLoading(btn, isLoading, label){
+      btn.disabled = isLoading;
+      btn.querySelector('span').textContent = isLoading ? 'Please wait…' : label;
+    }
+
+    window.handleLogin = async function(e){
+      e.preventDefault();
+      hideAuthMessages();
+      const btn = document.getElementById('login-btn');
+      const email = document.getElementById('login-email').value.trim();
+      const password = document.getElementById('login-password').value;
+      setBtnLoading(btn, true);
+      const { data, error } = await sb.auth.signInWithPassword({ email, password });
+      setBtnLoading(btn, false, 'Log in');
+      if (error) { showAuthError(error.message); return false; }
+      await afterAuth(data.user);
+      return false;
+    };
+
+    window.handleSignup = async function(e){
+      e.preventDefault();
+      hideAuthMessages();
+      const btn = document.getElementById('signup-btn');
+      const name = document.getElementById('signup-name').value.trim();
+      const email = document.getElementById('signup-email').value.trim();
+      const password = document.getElementById('signup-password').value;
+      setBtnLoading(btn, true);
+      const { data, error } = await sb.auth.signUp({
+        email, password,
+        options: { data: { name } }
+      });
+      setBtnLoading(btn, false, 'Create account');
+      if (error) { showAuthError(error.message); return false; }
+
+      if (data.session) {
+        await afterAuth(data.user);
+      } else {
+        showAuthSuccess("Account created. Check your email to confirm it, then log in.");
+        document.getElementById('signup-form').reset();
+        switchAuthTab('login');
+      }
+      return false;
+    };
+
+    window.handleLogout = async function(){
+      if (!state.isGuest) {
+        const { error } = await sb.auth.signOut();
+        if (error) console.error('Sign out failed:', error.message);
+      }
+      state.currentUser = null;
+      state.isGuest = false;
+      state.assets = [];
+      document.getElementById('app-screen').classList.add('hidden');
+      document.getElementById('auth-screen').classList.remove('hidden');
+      document.getElementById('user-name-display').textContent = '—';
+      document.getElementById('user-initial').textContent = 'A';
+      document.getElementById('guest-mode-banner').classList.remove('visible');
+      document.getElementById('add-asset-btn').classList.remove('guest-hidden');
+      document.getElementById('empty-add-asset-btn').classList.remove('guest-hidden');
+      document.getElementById('login-form').reset();
+      document.getElementById('signup-form').reset();
+      switchAuthTab('login');
+    };
+
+    // Guest mode intentionally does NOT call signInAnonymously().
+    // The browser stays unauthenticated, so Supabase uses the `anon` role.
+    // RLS should therefore grant this role SELECT only.
+    window.enterGuestMode = async function(){
+      hideAuthMessages();
+      state.currentUser = null;
+      state.isGuest = true;
+      document.getElementById('auth-screen').classList.add('hidden');
+      document.getElementById('app-screen').classList.remove('hidden');
+      document.getElementById('user-name-display').textContent = 'Guest';
+      document.getElementById('user-initial').textContent = 'G';
+      document.getElementById('guest-mode-banner').classList.add('visible');
+      document.getElementById('add-asset-btn').classList.add('guest-hidden');
+      document.getElementById('empty-add-asset-btn').classList.add('guest-hidden');
+      await loadAssets();
+    };
+
+    function canWrite(){
+      return !state.isGuest && !!state.currentUser;
+    }
+
+    function requireAuthenticated(){
+      if (canWrite()) return true;
+      showToast('Guest mode is read only', true);
+      return false;
+    }
+
+    async function afterAuth(user){
+      state.currentUser = user;
+      state.isGuest = false;
+      const name = (user.user_metadata && user.user_metadata.name) || user.email;
+      document.getElementById('auth-screen').classList.add('hidden');
+      document.getElementById('app-screen').classList.remove('hidden');
+      document.getElementById('user-name-display').textContent = name;
+      document.getElementById('user-initial').textContent = name.trim().charAt(0).toUpperCase() || '?';
+      document.getElementById('guest-mode-banner').classList.remove('visible');
+      document.getElementById('add-asset-btn').classList.remove('guest-hidden');
+      document.getElementById('empty-add-asset-btn').classList.remove('guest-hidden');
+      await loadAssets();
+    }
+
+    // Restore an existing session on page load/refresh.
+    sb.auth.getSession().then(({ data }) => {
+      if (data.session) {
+        afterAuth(data.session.user);
+      }
+    });
+
+    /* ---------------- Data loading ---------------- */
+    async function loadAssets(){
+      state.loading = true;
+      document.getElementById('loading-state').classList.remove('hidden');
+      document.getElementById('empty-state').classList.add('hidden');
+      const { data, error } = await sb.from('assets').select('*').order('created_at', { ascending: false });
+      state.loading = false;
+      document.getElementById('loading-state').classList.add('hidden');
+      if (error) { showAppError(error.message); return; }
+      state.assets = data || [];
+      populateTeamFilter();
+      renderTable();
+    }
+
+    function showAppError(msg){
+      document.getElementById('app-error-text').textContent = msg;
+      document.getElementById('app-error').classList.remove('hidden');
+    }
+
+    /* ---------------- Derived status ---------------- */
+    function assetStatus(asset){
+      return (asset.date_out && !asset.date_in) ? 'onloan' : 'available';
+    }
+    function fmtDate(d){
+      if(!d) return '—';
+      const [y,m,day] = d.split('-');
+      const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      return `${day} ${months[parseInt(m,10)-1]} ${y}`;
+    }
+    function escapeHtml(str){
+      const div = document.createElement('div');
+      div.textContent = str == null ? '' : str;
+      return div.innerHTML;
+    }
+    function escapeAttr(str){
+      return escapeHtml(str).replace(/"/g, '&quot;');
+    }
+    function toUpperTrim(v){
+      return (v || '').trim().toUpperCase();
+    }
+    function capitalizeWords(v){
+      const t = (v || '').trim();
+      if(!t) return t;
+      return t.split(' ').map(word => word.length ? word.charAt(0).toUpperCase() + word.slice(1) : word).join(' ');
+    }
+
+    /* ---------------- Filters & suggestion lists ---------------- */
+    function populateTeamFilter(){
+      const sel = document.getElementById('filter-team');
+      const current = sel.value;
+      const teams = [...new Set(state.assets.map(a => a.team).filter(Boolean))].sort();
+      sel.innerHTML = '<option value="">All loan cells</option>' + teams.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+      if(teams.includes(current)) sel.value = current;
+
+      const ownerSel = document.getElementById('filter-owner');
+      const currentOwner = ownerSel.value;
+      const owners = [...new Set(state.assets.map(a => a.owner).filter(Boolean))].sort();
+      ownerSel.innerHTML = '<option value="">All owning cells</option>' + owners.map(o => `<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`).join('');
+      if(owners.includes(currentOwner)) ownerSel.value = currentOwner;
+
+      const locations = [...new Set(state.assets.map(a => a.location).filter(Boolean))].sort();
+
+      document.getElementById('owner-suggestions').innerHTML = owners.map(o => `<option value="${escapeHtml(o)}">`).join('');
+      document.getElementById('team-suggestions').innerHTML = teams.map(t => `<option value="${escapeHtml(t)}">`).join('');
+      document.getElementById('location-suggestions').innerHTML = locations.map(l => `<option value="${escapeHtml(l)}">`).join('');
+    }
+
+    /* ---------------- Render ---------------- */
+    window.renderTable = function(){
+      const emptyText = document.getElementById('empty-state-text');
+      if (emptyText) {
+        emptyText.textContent = state.isGuest
+          ? 'Try clearing filters to see more assets.'
+          : 'Try clearing filters, or add a new asset to the register.';
+      }
+      const search = document.getElementById('search-input').value.trim().toLowerCase();
+      const ownerFilter = document.getElementById('filter-owner').value;
+      const statusFilter = document.getElementById('filter-status').value;
+      const teamFilter = document.getElementById('filter-team').value;
+
+      let filtered = state.assets.filter(a => {
+        const matchesSearch = !search
+          || a.number.toLowerCase().includes(search)
+          || a.name.toLowerCase().includes(search);
+        const matchesOwner = !ownerFilter || a.owner === ownerFilter;
+        const matchesStatus = !statusFilter || assetStatus(a) === statusFilter;
+        const matchesTeam = !teamFilter || a.team === teamFilter;
+        return matchesSearch && matchesOwner && matchesStatus && matchesTeam;
+      });
+
+      const totalItems = filtered.length;
+      const totalPages = Math.max(1, Math.ceil(totalItems / state.pageSize));
+      if (state.currentPage > totalPages) state.currentPage = totalPages;
+      if (state.currentPage < 1) state.currentPage = 1;
+
+      const startIdx = (state.currentPage - 1) * state.pageSize;
+      const pageItems = filtered.slice(startIdx, startIdx + state.pageSize);
+
+      const tbody = document.getElementById('asset-tbody');
+      const emptyState = document.getElementById('empty-state');
+
+      if(totalItems === 0 && !state.loading){
+        tbody.innerHTML = '';
+        emptyState.classList.remove('hidden');
+      } else {
+        emptyState.classList.add('hidden');
+        tbody.innerHTML = pageItems.map(a => {
+          const status = assetStatus(a);
+          const badge = status === 'onloan'
+            ? '<span class="badge onloan">On loan</span>'
+            : '<span class="badge available">Available</span>';
+          return `
+            <tr>
+              <td class="asset-no">${escapeHtml(a.number)}</td>
+              <td>${escapeHtml(a.name)}</td>
+              <td>${escapeHtml(a.location)}</td>
+              <td>${a.owner ? escapeHtml(a.owner) : '—'}</td>
+              <td>${badge}</td>
+              <td>
+                <input type="date" class="inline-date-input" value="${a.date_out || ''}"
+                       data-asset-id="${a.id}" onchange="handleInlineDateOutEdit(this)"
+                       title="Click to set loan date out" ${state.isGuest ? 'disabled' : ''}>
+              </td>
+              <td>
+                <input type="date" class="inline-date-input" value="${a.date_in || ''}"
+                       data-asset-id="${a.id}" onchange="handleInlineDateInEdit(this)"
+                       title="Click to set date in" ${state.isGuest ? 'disabled' : ''}>
+              </td>
+              <td>
+                <input type="text" class="inline-team-input" list="team-suggestions"
+                       value="${escapeAttr(a.team || '')}" placeholder="—"
+                       data-asset-id="${a.id}" onchange="handleInlineTeamEdit(this)"
+                       onkeydown="if(event.key==='Enter'){this.blur();}" ${state.isGuest ? 'disabled' : ''}>
+              </td>
+              <td>
+                <div class="row-actions">
+                  ${state.isGuest ? '' : `
+                    <button class="icon-btn" title="Edit" onclick="openAssetModal('${a.id}')">✎</button>
+                    <button class="icon-btn danger" title="Delete" onclick="openDeleteModal('${a.id}')">✕</button>
+                  `}
+                </div>
+              </td>
+            </tr>`;
+        }).join('');
+      }
+      updatePaginationBar(totalItems, totalPages, startIdx);
+      updateStats();
+    };
+
+    function updatePaginationBar(totalItems, totalPages, startIdx){
+      const summary = document.getElementById('page-summary');
+      if (totalItems === 0) {
+        summary.textContent = 'No assets';
+      } else {
+        const from = startIdx + 1;
+        const to = Math.min(startIdx + state.pageSize, totalItems);
+        summary.textContent = `${from}–${to} of ${totalItems} · Page ${state.currentPage} of ${totalPages}`;
+      }
+      document.getElementById('page-prev').disabled = state.currentPage <= 1;
+      document.getElementById('page-next').disabled = state.currentPage >= totalPages;
+    }
+
+    window.onFiltersChanged = function(){
+      state.currentPage = 1;
+      renderTable();
+    };
+
+    window.onPageSizeChanged = function(){
+      state.pageSize = parseInt(document.getElementById('page-size-select').value, 10);
+      state.currentPage = 1;
+      renderTable();
+    };
+
+    window.goToPage = function(delta){
+      state.currentPage += delta;
+      renderTable();
+    };
+
+    function updateStats(){
+      const total = state.assets.length;
+      const onLoan = state.assets.filter(a => assetStatus(a) === 'onloan').length;
+      const available = total - onLoan;
+      const locations = new Set(state.assets.map(a => a.location).filter(Boolean)).size;
+      document.getElementById('stat-total').textContent = total;
+      document.getElementById('stat-loan').textContent = onLoan;
+      document.getElementById('stat-available').textContent = available;
+      document.getElementById('stat-locations').textContent = locations;
+      document.getElementById('stat-total-side').textContent = total;
+      document.getElementById('stat-loan-side').textContent = onLoan;
+    }
+
+    /* ---------------- Asset modal (add/edit) ---------------- */
+    window.openAssetModal = function(id){
+      if (!requireAuthenticated()) return;
+      const form = document.getElementById('asset-form');
+      form.reset();
+      document.getElementById('asset-id').value = '';
+
+      if(id){
+        const asset = state.assets.find(a => a.id === id);
+        document.getElementById('modal-title').textContent = 'Edit asset';
+        document.getElementById('modal-sub').textContent = "Update this asset's details.";
+        document.getElementById('asset-id').value = asset.id;
+        document.getElementById('asset-number').value = asset.number;
+        document.getElementById('asset-name').value = asset.name;
+        document.getElementById('asset-location').value = asset.location;
+        document.getElementById('asset-owner').value = asset.owner || '';
+        document.getElementById('asset-date-out').value = asset.date_out || '';
+        document.getElementById('asset-date-in').value = asset.date_in || '';
+        document.getElementById('asset-team').value = asset.team || '';
+      } else {
+        document.getElementById('modal-title').textContent = 'Add asset';
+        document.getElementById('modal-sub').textContent = "Enter the asset's details below.";
+      }
+      document.getElementById('asset-modal-backdrop').classList.remove('hidden');
+      document.getElementById('asset-number').focus();
+    };
+
+    window.closeAssetModal = function(){
+      document.getElementById('asset-modal-backdrop').classList.add('hidden');
+    };
+
+    window.handleAssetSubmit = async function(e){
+      e.preventDefault();
+      if (!requireAuthenticated()) return false;
+      const btn = document.getElementById('asset-save-btn');
+      const id = document.getElementById('asset-id').value;
+      const payload = {
+        number: toUpperTrim(document.getElementById('asset-number').value),
+        name: capitalizeWords(document.getElementById('asset-name').value),
+        location: capitalizeWords(document.getElementById('asset-location').value),
+        owner: capitalizeWords(document.getElementById('asset-owner').value) || null,
+        date_out: document.getElementById('asset-date-out').value || null,
+        date_in: document.getElementById('asset-date-in').value || null,
+        team: capitalizeWords(document.getElementById('asset-team').value) || null
+      };
+
+      // Business rule: once Date in is set, the asset is considered returned —
+      // Loan date out and Loan cell are cleared automatically.
+      if (payload.date_in) {
+        payload.date_out = null;
+        payload.team = null;
+      }
+
+      setBtnLoading(btn, true);
+      let error;
+      if (id) {
+        ({ error } = await sb.from('assets').update(payload).eq('id', id));
+      } else {
+        payload.created_by = state.currentUser.id;
+        ({ error } = await sb.from('assets').insert([payload]));
+      }
+      setBtnLoading(btn, false, 'Save asset');
+
+      if (error) {
+        if (error.message.toLowerCase().includes('duplicate')) {
+          alert(`Asset number "${payload.number}" is already in use.`);
+        } else {
+          alert(error.message);
+        }
+        return false;
+      }
+
+      showToast(id ? 'Asset updated' : 'Asset added');
+      closeAssetModal();
+      await loadAssets();
+      return false;
+    };
+
+    /* ---------------- Delete modal ---------------- */
+    window.openDeleteModal = function(id){
+      if (!requireAuthenticated()) return;
+      const asset = state.assets.find(a => a.id === id);
+      state.editingDeleteId = id;
+      document.getElementById('delete-asset-label').textContent = `${asset.number} — ${asset.name}`;
+      document.getElementById('delete-modal-backdrop').classList.remove('hidden');
+    };
+    window.closeDeleteModal = function(){
+      document.getElementById('delete-modal-backdrop').classList.add('hidden');
+      state.editingDeleteId = null;
+    };
+    window.confirmDelete = async function(){
+      if (!requireAuthenticated()) return;
+      const { error } = await sb.from('assets').delete().eq('id', state.editingDeleteId);
+      closeDeleteModal();
+      if (error) { alert(error.message); return; }
+      showToast('Asset removed');
+      await loadAssets();
+    };
+
+    /* ---------------- Inline row editing (Loan cell, Loan date out, Date in) ---------------- */
+    window.handleInlineTeamEdit = async function(inputEl){
+      if (!requireAuthenticated()) {
+        renderTable();
+        return;
+      }
+      const id = inputEl.dataset.assetId;
+      const asset = state.assets.find(a => a.id === id);
+      const newValue = capitalizeWords(inputEl.value) || null;
+      if (asset && asset.team === newValue) return; // no change
+      inputEl.disabled = true;
+      const { error } = await sb.from('assets').update({ team: newValue }).eq('id', id);
+      inputEl.disabled = false;
+      if (error) {
+        alert(error.message);
+        inputEl.value = asset ? (asset.team || '') : '';
+        return;
+      }
+      if (asset) asset.team = newValue;
+      inputEl.value = newValue || '';
+      populateTeamFilter();
+      renderTable();
+      showToast('Loan cell updated');
+    };
+
+    window.handleInlineDateOutEdit = async function(inputEl){
+      if (!requireAuthenticated()) {
+        renderTable();
+        return;
+      }
+      const id = inputEl.dataset.assetId;
+      const asset = state.assets.find(a => a.id === id);
+      const newValue = inputEl.value || null;
+      if (asset && asset.date_out === newValue) return; // no change
+      inputEl.disabled = true;
+      const { error } = await sb.from('assets').update({ date_out: newValue }).eq('id', id);
+      inputEl.disabled = false;
+      if (error) {
+        alert(error.message);
+        inputEl.value = asset ? (asset.date_out || '') : '';
+        return;
+      }
+      if (asset) asset.date_out = newValue;
+      renderTable();
+      showToast('Loan date out updated');
+    };
+
+    window.handleInlineDateInEdit = async function(inputEl){
+      if (!requireAuthenticated()) {
+        renderTable();
+        return;
+      }
+      const id = inputEl.dataset.assetId;
+      const asset = state.assets.find(a => a.id === id);
+      const newValue = inputEl.value || null;
+      if (asset && asset.date_in === newValue) return; // no change
+
+      // Business rule: once Date in is set, the asset is considered returned —
+      // clear Loan date out and Loan cell so the register doesn't show it as still on loan.
+      const payload = { date_in: newValue };
+      if (newValue) {
+        payload.date_out = null;
+        payload.team = null;
+      }
+
+      inputEl.disabled = true;
+      const { error } = await sb.from('assets').update(payload).eq('id', id);
+      inputEl.disabled = false;
+      if (error) {
+        alert(error.message);
+        inputEl.value = asset ? (asset.date_in || '') : '';
+        return;
+      }
+      if (asset) Object.assign(asset, payload);
+      populateTeamFilter();
+      renderTable();
+      showToast(newValue ? 'Date in set — loan date out and loan cell cleared' : 'Date in cleared');
+    };
+
+    /* ---------------- Toast ---------------- */
+    let toastTimer;
+    function showToast(msg, isError){
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = 'toast show' + (isError ? ' error' : '');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+    }
+
+    /* ---------------- Auto-format fields on blur ---------------- */
+    document.getElementById('asset-number').addEventListener('blur', (e) => {
+      e.target.value = toUpperTrim(e.target.value);
+    });
+    ['asset-name', 'asset-location', 'asset-owner', 'asset-team'].forEach(id => {
+      document.getElementById(id).addEventListener('blur', (e) => {
+        e.target.value = capitalizeWords(e.target.value);
+      });
+    });
+
+    /* ---------------- Modal dismiss handlers ---------------- */
+    // Asset modal is intentionally NOT dismissed by clicking the backdrop,
+    // so in-progress form entries aren't lost from a stray click. Use the
+    // Cancel button or Escape key instead.
+    document.getElementById('delete-modal-backdrop').addEventListener('click', (e) => {
+      if(e.target.id === 'delete-modal-backdrop') closeDeleteModal();
+    });
+    document.addEventListener('keydown', (e) => {
+      if(e.key === 'Escape'){ closeAssetModal(); closeDeleteModal(); }
+    });
+  }
+  /* ============================================================
+   PWA SERVICE WORKER
+   ============================================================ */
+
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("./sw.js")
+        .then(registration => {
+          console.log(
+            "PWA service worker registered:",
+            registration.scope
+          );
+        })
+        .catch(error => {
+          console.error(
+            "PWA service worker registration failed:",
+            error
+          );
+        });
+    });
+  }
+</script>
+</body>
+</html>
