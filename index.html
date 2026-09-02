@@ -654,23 +654,47 @@
       hideAuthMessages();
       const btn = document.getElementById('signup-btn');
       const name = document.getElementById('signup-name').value.trim();
-      const email = document.getElementById('signup-email').value.trim();
+      const email = document.getElementById('signup-email').value.trim().toLowerCase();
       const password = document.getElementById('signup-password').value;
+
       setBtnLoading(btn, true);
+
       const { data, error } = await sb.auth.signUp({
-        email, password,
-        options: { data: { name } }
+        email,
+        password,
+        options: {
+          data: { name }
+        }
       });
+
       setBtnLoading(btn, false, 'Create account');
-      if (error) { showAuthError(error.message); return false; }
+
+      if (error) {
+        const errorMessage = error.message.toLowerCase();
+        if (
+          errorMessage.includes('not authorized') ||
+          errorMessage.includes('whitelist') ||
+          errorMessage.includes('database error')
+        ) {
+          showAuthError(
+            'This email address is not authorized to create an account. Please contact your asset manager.'
+          );
+        } else {
+          showAuthError(error.message);
+        }
+        return false;
+      }
 
       if (data.session) {
         await afterAuth(data.user);
       } else {
-        showAuthSuccess("Account created. Check your email to confirm it, then log in.");
+        showAuthSuccess(
+          'Account created. Check your email to confirm it, then log in.'
+        );
         document.getElementById('signup-form').reset();
         switchAuthTab('login');
       }
+
       return false;
     };
 
