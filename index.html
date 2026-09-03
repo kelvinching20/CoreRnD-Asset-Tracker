@@ -147,6 +147,10 @@
   }
   .field input:focus, .field select:focus{border-color:var(--blue);}
   .field-hint{font-size:12px;color:var(--slate-light);margin-top:4px;}
+  .owning-cell-readonly{
+    padding:11px 13px;border-radius:8px;border:1.5px solid var(--line);
+    font-size:14.5px;color:var(--ink);background:var(--blue-light);font-weight:600;
+  }
   .btn-primary{
     background:var(--blue);color:var(--white);border:none;padding:12px 18px;border-radius:8px;
     font-weight:600;font-size:14.5px;width:100%;transition:background .15s ease, transform .05s ease;
@@ -163,6 +167,13 @@
     border-radius:8px;font-size:13px;margin-bottom:16px;
   }
   .auth-note{margin-top:20px;font-size:12.5px;color:var(--slate-light);line-height:1.5;text-align:center;}
+  .btn-guest{
+    background:#EEF0F2;color:var(--slate);border:1.5px solid var(--line);
+    padding:12px 18px;border-radius:8px;font-weight:600;font-size:14.5px;width:100%;
+    transition:background .15s ease, color .15s ease;
+  }
+  .btn-guest:hover{background:#E2E5E9;color:var(--ink);}
+  .btn-guest:active{transform:scale(0.99);}
   .guest-divider{width:100%;display:flex;align-items:center;justify-content:center;margin:10px 0 8px;font-size:13px;color:var(--slate);}
   .guest-divider::before,
   .guest-divider::after{content:"";flex:1;height:1px;background:var(--line);}
@@ -523,8 +534,9 @@
           <input type="text" id="asset-location" required list="location-suggestions" placeholder="e.g. Me Lab Asset Cabinet">
         </div>
         <div class="field full">
-          <label for="asset-owner">Owning cell</label>
-          <input type="text" id="asset-owner" list="owner-suggestions" placeholder="e.g. Mobile Robot Cell">
+          <label>Owning cell</label>
+          <div class="owning-cell-readonly" id="owning-cell-readonly">—</div>
+          <div class="field-hint">Automatically set to your assigned cell. Contact your asset manager to change it.</div>
           <div class="field-hint">The cell this asset belongs to (not who it's currently loaned to).</div>
         </div>
         <div class="field">
@@ -563,7 +575,6 @@
 </div>
 
 <datalist id="location-suggestions"></datalist>
-<datalist id="owner-suggestions"></datalist>
 <datalist id="team-suggestions"></datalist>
 
 <div id="toast" class="toast"></div>
@@ -598,6 +609,7 @@
     const state = {
       assets: [],
       currentUser: null,
+      userCell: null,
       isGuest: false,
       editingDeleteId: null,
       loading: true,
@@ -704,6 +716,7 @@
         if (error) console.error('Sign out failed:', error.message);
       }
       state.currentUser = null;
+      state.userCell = null;
       state.isGuest = false;
       state.assets = [];
       document.getElementById('app-screen').classList.add('hidden');
@@ -735,13 +748,32 @@
       await loadAssets();
     };
 
-    function canWrite(){
-      return !state.isGuest && !!state.currentUser;
+    function canAddAssets(){
+      return !state.isGuest && !!state.currentUser && !!state.userCell;
     }
 
-    function requireAuthenticated(){
-      if (canWrite()) return true;
-      showToast('Guest mode is read only', true);
+    function cellsMatch(a, b){
+      return (a || '').trim().toLowerCase() === (b || '').trim().toLowerCase();
+    }
+
+    function canEditAsset(asset){
+      if (state.isGuest || !state.currentUser || !state.userCell) return false;
+      return cellsMatch(asset && asset.owner, state.userCell);
+    }
+
+    function requireCanAdd(){
+      if (canAddAssets()) return true;
+      if (!state.isGuest && state.currentUser && !state.userCell) {
+        showToast("Your account isn't assigned to a cell — contact your asset manager", true);
+      } else {
+        showToast('Guest mode is read only', true);
+      }
+      return false;
+    }
+
+    function requireCanEdit(asset){
+      if (canEditAsset(asset)) return true;
+      showToast(state.isGuest ? 'Guest mode is read only' : 'Only your own cell can edit this asset', true);
       return false;
     }
 
@@ -756,6 +788,19 @@
       document.getElementById('guest-mode-banner').classList.remove('visible');
       document.getElementById('add-asset-btn').classList.remove('guest-hidden');
       document.getElementById('empty-add-asset-btn').classList.remove('guest-hidden');
+
+      // Look up which cell this account is assigned to. This drives
+      // auto-filled Owning cell on new assets and edit/delete permissions.
+      const { data: whitelistRow, error: whitelistError } = await sb
+        .from('allowed_signup_emails')
+        .select('cell')
+        .eq('email', user.email)
+        .maybeSingle();
+      if (whitelistError) {
+        console.error('Could not look up assigned cell:', whitelistError.message);
+      }
+      state.userCell = (whitelistRow && whitelistRow.cell) || null;
+
       await loadAssets();
     }
 
@@ -828,7 +873,6 @@
 
       const locations = [...new Set(state.assets.map(a => a.location).filter(Boolean))].sort();
 
-      document.getElementById('owner-suggestions').innerHTML = owners.map(o => `<option value="${escapeHtml(o)}">`).join('');
       document.getElementById('team-suggestions').innerHTML = teams.map(t => `<option value="${escapeHtml(t)}">`).join('');
       document.getElementById('location-suggestions').innerHTML = locations.map(l => `<option value="${escapeHtml(l)}">`).join('');
     }
@@ -877,6 +921,7 @@
           const badge = status === 'onloan'
             ? '<span class="badge onloan">On loan</span>'
             : '<span class="badge available">Available</span>';
+          const rowEditable = canEditAsset(a);
           return `
             <tr>
               <td class="asset-no">${escapeHtml(a.number)}</td>
@@ -887,25 +932,25 @@
               <td>
                 <input type="date" class="inline-date-input" value="${a.date_out || ''}"
                        data-asset-id="${a.id}" onchange="handleInlineDateOutEdit(this)"
-                       title="Click to set loan date out" ${state.isGuest ? 'disabled' : ''}>
+                       title="Click to set loan date out" ${rowEditable ? '' : 'disabled'}>
               </td>
               <td>
                 <input type="date" class="inline-date-input" value="${a.date_in || ''}"
                        data-asset-id="${a.id}" onchange="handleInlineDateInEdit(this)"
-                       title="Click to set date in" ${state.isGuest ? 'disabled' : ''}>
+                       title="Click to set date in" ${rowEditable ? '' : 'disabled'}>
               </td>
               <td>
                 <input type="text" class="inline-team-input" list="team-suggestions"
                        value="${escapeAttr(a.team || '')}" placeholder="—"
                        data-asset-id="${a.id}" onchange="handleInlineTeamEdit(this)"
-                       onkeydown="if(event.key==='Enter'){this.blur();}" ${state.isGuest ? 'disabled' : ''}>
+                       onkeydown="if(event.key==='Enter'){this.blur();}" ${rowEditable ? '' : 'disabled'}>
               </td>
               <td>
                 <div class="row-actions">
-                  ${state.isGuest ? '' : `
+                  ${rowEditable ? `
                     <button class="icon-btn" title="Edit" onclick="openAssetModal('${a.id}')">✎</button>
                     <button class="icon-btn danger" title="Delete" onclick="openDeleteModal('${a.id}')">✕</button>
-                  `}
+                  ` : ''}
                 </div>
               </td>
             </tr>`;
@@ -959,26 +1004,32 @@
 
     /* ---------------- Asset modal (add/edit) ---------------- */
     window.openAssetModal = function(id){
-      if (!requireAuthenticated()) return;
+      const existingAsset = id ? state.assets.find(a => a.id === id) : null;
+      if (id) {
+        if (!requireCanEdit(existingAsset)) return;
+      } else {
+        if (!requireCanAdd()) return;
+      }
+
       const form = document.getElementById('asset-form');
       form.reset();
       document.getElementById('asset-id').value = '';
 
-      if(id){
-        const asset = state.assets.find(a => a.id === id);
+      if(existingAsset){
         document.getElementById('modal-title').textContent = 'Edit asset';
         document.getElementById('modal-sub').textContent = "Update this asset's details.";
-        document.getElementById('asset-id').value = asset.id;
-        document.getElementById('asset-number').value = asset.number;
-        document.getElementById('asset-name').value = asset.name;
-        document.getElementById('asset-location').value = asset.location;
-        document.getElementById('asset-owner').value = asset.owner || '';
-        document.getElementById('asset-date-out').value = asset.date_out || '';
-        document.getElementById('asset-date-in').value = asset.date_in || '';
-        document.getElementById('asset-team').value = asset.team || '';
+        document.getElementById('asset-id').value = existingAsset.id;
+        document.getElementById('asset-number').value = existingAsset.number;
+        document.getElementById('asset-name').value = existingAsset.name;
+        document.getElementById('asset-location').value = existingAsset.location;
+        document.getElementById('owning-cell-readonly').textContent = existingAsset.owner || '—';
+        document.getElementById('asset-date-out').value = existingAsset.date_out || '';
+        document.getElementById('asset-date-in').value = existingAsset.date_in || '';
+        document.getElementById('asset-team').value = existingAsset.team || '';
       } else {
         document.getElementById('modal-title').textContent = 'Add asset';
         document.getElementById('modal-sub').textContent = "Enter the asset's details below.";
+        document.getElementById('owning-cell-readonly').textContent = state.userCell || '—';
       }
       document.getElementById('asset-modal-backdrop').classList.remove('hidden');
       document.getElementById('asset-number').focus();
@@ -990,14 +1041,20 @@
 
     window.handleAssetSubmit = async function(e){
       e.preventDefault();
-      if (!requireAuthenticated()) return false;
-      const btn = document.getElementById('asset-save-btn');
       const id = document.getElementById('asset-id').value;
+      const existingAsset = id ? state.assets.find(a => a.id === id) : null;
+      if (id) {
+        if (!requireCanEdit(existingAsset)) return false;
+      } else {
+        if (!requireCanAdd()) return false;
+      }
+
+      const btn = document.getElementById('asset-save-btn');
       const payload = {
         number: toUpperTrim(document.getElementById('asset-number').value),
         name: capitalizeWords(document.getElementById('asset-name').value),
         location: capitalizeWords(document.getElementById('asset-location').value),
-        owner: capitalizeWords(document.getElementById('asset-owner').value) || null,
+        owner: id ? existingAsset.owner : state.userCell,
         date_out: document.getElementById('asset-date-out').value || null,
         date_in: document.getElementById('asset-date-in').value || null,
         team: capitalizeWords(document.getElementById('asset-team').value) || null
@@ -1037,8 +1094,8 @@
 
     /* ---------------- Delete modal ---------------- */
     window.openDeleteModal = function(id){
-      if (!requireAuthenticated()) return;
       const asset = state.assets.find(a => a.id === id);
+      if (!requireCanEdit(asset)) return;
       state.editingDeleteId = id;
       document.getElementById('delete-asset-label').textContent = `${asset.number} — ${asset.name}`;
       document.getElementById('delete-modal-backdrop').classList.remove('hidden');
@@ -1048,7 +1105,8 @@
       state.editingDeleteId = null;
     };
     window.confirmDelete = async function(){
-      if (!requireAuthenticated()) return;
+      const asset = state.assets.find(a => a.id === state.editingDeleteId);
+      if (!requireCanEdit(asset)) return;
       const { error } = await sb.from('assets').delete().eq('id', state.editingDeleteId);
       closeDeleteModal();
       if (error) { alert(error.message); return; }
@@ -1058,12 +1116,12 @@
 
     /* ---------------- Inline row editing (Loan cell, Loan date out, Date in) ---------------- */
     window.handleInlineTeamEdit = async function(inputEl){
-      if (!requireAuthenticated()) {
+      const id = inputEl.dataset.assetId;
+      const asset = state.assets.find(a => a.id === id);
+      if (!requireCanEdit(asset)) {
         renderTable();
         return;
       }
-      const id = inputEl.dataset.assetId;
-      const asset = state.assets.find(a => a.id === id);
       const newValue = capitalizeWords(inputEl.value) || null;
       if (asset && asset.team === newValue) return; // no change
       inputEl.disabled = true;
@@ -1082,12 +1140,12 @@
     };
 
     window.handleInlineDateOutEdit = async function(inputEl){
-      if (!requireAuthenticated()) {
+      const id = inputEl.dataset.assetId;
+      const asset = state.assets.find(a => a.id === id);
+      if (!requireCanEdit(asset)) {
         renderTable();
         return;
       }
-      const id = inputEl.dataset.assetId;
-      const asset = state.assets.find(a => a.id === id);
       const newValue = inputEl.value || null;
       if (asset && asset.date_out === newValue) return; // no change
       inputEl.disabled = true;
@@ -1104,12 +1162,12 @@
     };
 
     window.handleInlineDateInEdit = async function(inputEl){
-      if (!requireAuthenticated()) {
+      const id = inputEl.dataset.assetId;
+      const asset = state.assets.find(a => a.id === id);
+      if (!requireCanEdit(asset)) {
         renderTable();
         return;
       }
-      const id = inputEl.dataset.assetId;
-      const asset = state.assets.find(a => a.id === id);
       const newValue = inputEl.value || null;
       if (asset && asset.date_in === newValue) return; // no change
 
@@ -1149,7 +1207,7 @@
     document.getElementById('asset-number').addEventListener('blur', (e) => {
       e.target.value = toUpperTrim(e.target.value);
     });
-    ['asset-name', 'asset-location', 'asset-owner', 'asset-team'].forEach(id => {
+    ['asset-name', 'asset-location', 'asset-team'].forEach(id => {
       document.getElementById(id).addEventListener('blur', (e) => {
         e.target.value = capitalizeWords(e.target.value);
       });
